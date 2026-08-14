@@ -307,7 +307,7 @@ def train(
         y = tf.y
         if isinstance(model, Trompt):
             # Trompt uses the layer-wise loss
-            pred = model.forward_stacked(tf)
+            pred = model(tf)
             num_layers = pred.size(1)
             # [batch_size * num_layers, num_classes]
             pred = pred.view(-1, out_channels)
@@ -337,6 +337,10 @@ def test(
     for tf in loader:
         tf = tf.to(device)
         pred = model(tf)
+        if isinstance(model, Trompt):
+            # [batch_size, num_layers, out_channels]
+            # -> [batch_size, out_channels]
+            pred = pred.mean(dim=1)
         if dataset.task_type == TaskType.MULTICLASS_CLASSIFICATION:
             pred = pred.argmax(dim=-1)
         elif dataset.task_type == TaskType.REGRESSION:
@@ -525,7 +529,7 @@ if __name__ == "__main__":
                     "Currently Trompt with finetuning is too expensive")
             model_cls = Trompt
             stype_encoder_dicts = []
-            for i in range(train_cfg["num_layers"]):
+            for _ in range(train_cfg["num_layers"]):
                 stype_encoder_dicts.append(
                     get_stype_encoder_dict(text_stype, text_encoder,
                                            train_tensor_frame))

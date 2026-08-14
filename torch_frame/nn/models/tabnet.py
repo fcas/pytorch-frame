@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
@@ -29,7 +30,7 @@ class TabNet(Module):
     .. note::
 
         For an example of using TabNet, see `examples/tabnet.py
-        <https://github.com/pyg-team/pytorch-frame/blob/master/examples/
+        <https://github.com/pyg-team/pytorch-frame/blob/main/examples/
         tabnet.py>`_.
 
     Args:
@@ -257,10 +258,14 @@ class FeatureTransformer(Module):
         return x
 
     def reset_parameters(self) -> None:
+        # TODO: Remove this type cast when PyTorch fixes typing issue where
+        # reset_parameters is typed as:
+        # Union[torch._tensor.Tensor, torch.nn.modules.module.Module]
+        # This issue was first observed on PyTorch 2.6.0.
         if not isinstance(self.shared_glu_block, Identity):
-            self.shared_glu_block.reset_parameters()
+            cast(Callable, self.shared_glu_block.reset_parameters)()
         if not isinstance(self.dependent, Identity):
-            self.dependent.reset_parameters()
+            cast(Callable, self.dependent.reset_parameters)()
 
 
 class GLUBlock(Module):

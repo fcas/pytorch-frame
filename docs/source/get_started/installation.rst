@@ -1,22 +1,35 @@
 Installation
 ============
 
-:pyf:`PyTorch Frame` is available for `Python 3.8` to `Python 3.11` on Linux, Windows and macOS.
+:pyf:`PyTorch Frame` is available for `Python 3.10` to `Python 3.14` on Linux, Windows and macOS.
 
 Installation via PyPI
 ---------------------
 
-.. code-block:: none
+.. code-block:: bash
 
-   pip install pytorch_frame
+   pip install pytorch-frame
 
    # Install with optional dependencies
-   pip install pytorch_frame[full]
+   pip install pytorch-frame[full]
 
 
-Installation from master
-------------------------
+Installation from main
+----------------------
 
-.. code-block:: none
+.. code-block:: bash
 
     pip install git+https://github.com/pyg-team/pytorch-frame.git
+
+
+Installation for development
+----------------------------
+
+.. code-block:: bash
+
+    git clone https://github.com/pyg-team/pytorch-frame.git
+    cd pytorch-frame
+    pip install -e .[dev]
+
+    # Install with optional dependencies
+    pip install -e .[dev,full]

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Callable, Sequence, TypeVar, Union
+from collections.abc import Callable, Sequence
+from typing import Any, TypeVar
 
 import torch
 from torch import Tensor
@@ -58,7 +59,7 @@ class _MultiTensor:
             return self.num_rows
         elif dim == 1:
             return self.num_cols
-        assert False, "Should not reach here."
+        raise AssertionError("Should not reach here.")
 
     def dim(self) -> int:
         return self.ndim
@@ -73,6 +74,9 @@ class _MultiTensor:
     @property
     def dtype(self) -> torch.dtype:
         return self.values.dtype
+
+    def is_floating_point(self) -> bool:
+        return self.values.is_floating_point()
 
     def clone(self) -> _MultiTensor:
         return self.__class__(
@@ -92,6 +96,12 @@ class _MultiTensor:
 
     def cuda(self, *args, **kwargs):
         return self._apply(lambda x: x.cuda(*args, **kwargs))
+
+    def pin_memory(self, *args, **kwargs):
+        return self._apply(lambda x: x.pin_memory(*args, **kwargs))
+
+    def is_pinned(self) -> bool:
+        return self.values.is_pinned() and self.offset.is_pinned()
 
     # Helper Functions ########################################################
 
@@ -138,7 +148,8 @@ class _MultiTensor:
         """
         dim = self._normalize_dim(dim)
         max_entries = self.num_rows if dim == 0 else self.num_cols
-        if isinstance(index, int):
+        if (isinstance(index, int)
+                or (isinstance(index, Tensor) and index.dim() == 0)):
             if index < 0:
                 index = index + max_entries
             if index < 0 or (check_out_of_bounds and index >= max_entries):
@@ -232,7 +243,7 @@ class _MultiTensor:
             return self._row_index_select(idx)
         elif dim == 1:
             return self._col_index_select(idx)
-        assert False, "Should not reach here."
+        raise AssertionError("Should not reach here.")
 
     def _row_index_select(self, index: Tensor) -> _MultiTensor:
         raise NotImplementedError
@@ -289,7 +300,7 @@ class _MultiTensor:
             return self._row_narrow(start, length)
         elif dim == 1:
             return self._col_narrow(start, length)
-        assert False, "Should not reach here."
+        raise AssertionError("Should not reach here.")
 
     def _row_narrow(self, start: int, length: int) -> _MultiTensor:
         raise NotImplementedError
@@ -323,12 +334,12 @@ class _MultiTensor:
             return self.index_select(index, dim=dim)
         # TODO: Don't materialize range, and instead pass it to PyTorch tensor
         # as index directly to avoid unnecessary memory usage.
-        elif isinstance(index, (list, range)):
+        elif isinstance(index, list | range):
             return self.index_select(
                 torch.tensor(index, dtype=torch.long, device=self.device),
                 dim=dim,
             )
-        assert False, "Should not reach here."
+        raise AssertionError("Should not reach here.")
 
     def _single_index_select(self, index: int, dim: int) -> _MultiTensor:
         raise NotImplementedError
@@ -336,7 +347,7 @@ class _MultiTensor:
     def fillna_col(
         self,
         col_index: int,
-        fill_value: Union[int, float, Tensor],
+        fill_value: int | float | Tensor,
     ):
         """Fill the :obj:`index`-th column in :obj:`MultiTensor` with
         fill_value in-place.

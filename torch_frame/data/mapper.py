@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -11,7 +12,12 @@ from tqdm import tqdm
 
 from torch_frame.data.multi_embedding_tensor import MultiEmbeddingTensor
 from torch_frame.data.multi_nested_tensor import MultiNestedTensor
-from torch_frame.typing import Series, TensorData, TextTokenizationOutputs
+from torch_frame.typing import (
+    WITH_PD3,
+    Series,
+    TensorData,
+    TextTokenizationOutputs,
+)
 
 NUM_MONTHS_PER_YEAR = 12
 '''
@@ -110,7 +116,7 @@ class CategoricalTensorMapper(TensorMapper):
 
     def backward(self, tensor: Tensor) -> pd.Series:
         index = tensor.cpu().numpy()
-        ser = pd.Series(self.categories[index].index)
+        ser = pd.Series(self.categories.iloc[index].index)
         ser[index < 0] = None
         return ser
 
@@ -143,7 +149,7 @@ class MultiCategoricalTensorMapper(TensorMapper):
 
     @staticmethod
     def split_by_sep(row: str | Iterable | None, sep: None | str) -> set[Any]:
-        if row is None or row is np.nan:
+        if row is None or row is np.nan or row is pd.NA:
             return {-1}
         elif isinstance(row, str):
             assert sep is not None
@@ -165,7 +171,7 @@ class MultiCategoricalTensorMapper(TensorMapper):
         *,
         device: torch.device | None = None,
     ) -> MultiNestedTensor:
-        if ser.dtype != 'object':
+        if ser.dtype != 'object' and not pd.api.types.is_string_dtype(ser):
             raise ValueError('Multi-categorical types expect string as input')
         values = []
         original_index = ser.index
@@ -324,8 +330,10 @@ class TextTokenizationTensorMapper(TensorMapper):
         *,
         device: torch.device | None = None,
     ) -> dict[str, MultiNestedTensor]:
-        ser = ser.astype(str)
-        ser_list = ser.tolist()
+        if WITH_PD3:
+            ser_list = [str(x) for x in ser]
+        else:
+            ser_list = ser.astype(str).tolist()
 
         feat_dict = {}
         if self.batch_size is None:
@@ -414,8 +422,10 @@ class EmbeddingTensorMapper(TensorMapper):
     ) -> MultiEmbeddingTensor:
 
         if self.embedder is not None:
-            ser = ser.astype(str)
-            ser_list = ser.tolist()
+            if WITH_PD3:
+                ser_list = [str(x) for x in ser]
+            else:
+                ser_list = ser.astype(str).tolist()
             if self.batch_size is None:
                 values = self.embedder(ser_list)
             else:

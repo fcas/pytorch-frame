@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -69,10 +70,12 @@ class TensorFrame:
         feat_dict: dict[torch_frame.stype, TensorData],
         col_names_dict: dict[torch_frame.stype, list[str]],
         y: Tensor | None = None,
+        num_rows: int | None = None,
     ) -> None:
         self.feat_dict = feat_dict
         self.col_names_dict = col_names_dict
         self.y = y
+        self._num_rows = num_rows
         self.validate()
 
         # Quick mapping from column names into their (stype, idx) pairs in
@@ -93,7 +96,13 @@ class TensorFrame:
         num_rows = self.num_rows
         empty_stypes: list[torch_frame.stype] = []
         for stype_name, feats in self.feat_dict.items():
-            num_cols = len(self.col_names_dict[stype_name])
+            col_names = self.col_names_dict[stype_name]
+            if not isinstance(col_names, list):
+                raise ValueError(
+                    f"col_names_dict[{stype_name}] must be a list of column "
+                    f"names.")
+
+            num_cols = len(col_names)
             if num_cols == 0:
                 empty_stypes.append(stype_name)
 
@@ -130,36 +139,44 @@ class TensorFrame:
                     f"The length of y is {len(self.y)}, which is not aligned "
                     f"with the number of rows ({num_rows}).")
 
-    def get_col_feat(self, col_name: str) -> TensorData:
+    def get_col_feat(
+        self,
+        col_name: str,
+        *,
+        return_stype: bool = False,
+    ) -> TensorData | tuple[TensorData, torch_frame.stype]:
         r"""Get feature of a given column.
 
         Args:
             col_name (str): Input column name.
+            return_stype (bool, optional): If set to :obj:`True`, will
+                additionally return the semantic type of the column.
 
         Returns:
             TensorData: Column feature for the given :obj:`col_name`. The shape
                 is :obj:`[num_rows, 1, *]`.
         """
         if col_name not in self._col_to_stype_idx:
-            raise ValueError(
-                f"{col_name} is not available in the TensorFrame object.")
+            raise ValueError(f"'{col_name}' is not available in the "
+                             f"'{self.__class__.__name__}' object")
+
         stype_name, idx = self._col_to_stype_idx[col_name]
+
         feat = self.feat_dict[stype_name]
-        if stype_name.use_dict_multi_nested_tensor:
-            assert isinstance(feat, dict)
+        if isinstance(feat, dict):
             col_feat: dict[str, MultiNestedTensor] = {}
             for key, mnt in feat.items():
                 value = mnt[:, idx]
                 assert isinstance(value, MultiNestedTensor)
                 col_feat[key] = value
-            return col_feat
+            out = col_feat
+        elif isinstance(feat, _MultiTensor):
+            out = feat[:, idx]
         else:
-            if stype_name.use_multi_tensor:
-                assert isinstance(feat, _MultiTensor)
-                return feat[:, idx]
-            else:
-                assert isinstance(feat, Tensor)
-                return feat[:, idx].unsqueeze(1)
+            assert isinstance(feat, Tensor)
+            out = feat[:, idx].unsqueeze(1)
+
+        return (out, stype_name) if return_stype else out
 
     @property
     def stypes(self) -> list[torch_frame.stype]:
@@ -176,6 +193,8 @@ class TensorFrame:
     @property
     def num_rows(self) -> int:
         r"""The number of rows in the :class:`TensorFrame`."""
+        if self._num_rows is not None:
+            return self._num_rows
         if self.is_empty:
             return 0
         feat = next(iter(self.feat_dict.values()))
@@ -294,7 +313,14 @@ class TensorFrame:
                 return x[index]
             return y
 
-        return self._apply(fn)
+        out = self._apply(fn)
+
+        if self._num_rows is not None:
+            device = index.device if isinstance(index, Tensor) else 'cpu'
+            dummy = torch.empty((self.num_rows, 0), device=device)
+            out._num_rows = dummy[index].size(0)
+
+        return out
 
     def __copy__(self) -> TensorFrame:
         out = self.__class__.__new__(self.__class__)
@@ -341,6 +367,17 @@ class TensorFrame:
 
         return self._apply(fn)
 
+    def pin_memory(self, *args, **kwargs):
+        def fn(x):
+            if isinstance(x, dict):
+                for key in x:
+                    x[key] = x[key].pin_memory(*args, **kwargs)
+            else:
+                x = x.pin_memory(*args, **kwargs)
+            return x
+
+        return self._apply(fn)
+
     # Helper Functions ########################################################
 
     def _apply(self, fn: Callable[[TensorData], TensorData]) -> TensorFrame:
@@ -348,7 +385,7 @@ class TensorFrame:
         out.feat_dict = {stype: fn(x) for stype, x in out.feat_dict.items()}
         if out.y is not None:
             y = fn(out.y)
-            assert isinstance(y, Tensor)
+            assert isinstance(y, Tensor | MultiNestedTensor)
             out.y = y
 
         return out

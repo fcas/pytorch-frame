@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import Enum
-from typing import Dict, List, Mapping, Union
+from typing import TypeAlias
 
 import pandas as pd
+import torch
 from torch import Tensor
 
 from torch_frame.data.multi_embedding_tensor import MultiEmbeddingTensor
 from torch_frame.data.multi_nested_tensor import MultiNestedTensor
+
+WITH_PT20 = int(torch.__version__.split('.')[0]) >= 2
+WITH_PT24 = WITH_PT20 and int(torch.__version__.split('.')[1]) >= 4
+WITH_PD3 = int(pd.__version__.split('.')[0]) >= 3
 
 
 class Metric(Enum):
@@ -23,8 +29,9 @@ class Metric(Enum):
     ROCAUC = 'rocauc'
     RMSE = 'rmse'
     MAE = 'mae'
+    R2 = 'r2'
 
-    def supports_task_type(self, task_type: 'TaskType') -> bool:
+    def supports_task_type(self, task_type: TaskType) -> bool:
         return self in task_type.supported_metrics
 
 
@@ -53,7 +60,7 @@ class TaskType(Enum):
     @property
     def supported_metrics(self) -> list[Metric]:
         if self == TaskType.REGRESSION:
-            return [Metric.RMSE, Metric.MAE]
+            return [Metric.RMSE, Metric.MAE, Metric.R2]
         elif self == TaskType.BINARY_CLASSIFICATION:
             return [Metric.ACCURACY, Metric.ROCAUC]
         elif self == TaskType.MULTICLASS_CLASSIFICATION:
@@ -101,17 +108,13 @@ class NAStrategy(Enum):
         ]
 
 
-Series = pd.Series
-DataFrame = pd.DataFrame
+Series: TypeAlias = pd.Series
+DataFrame: TypeAlias = pd.DataFrame
 
-IndexSelectType = Union[int, List[int], range, slice, Tensor]
-ColumnSelectType = Union[str, List[str]]
-TextTokenizationMapping = Mapping[str, Tensor]
-TextTokenizationOutputs = Union[List[TextTokenizationMapping],
-                                TextTokenizationMapping]
-TensorData = Union[
-    Tensor,
-    MultiNestedTensor,
-    MultiEmbeddingTensor,
-    Dict[str, MultiNestedTensor],
-]
+IndexSelectType: TypeAlias = int | list[int] | range | slice | Tensor
+ColumnSelectType: TypeAlias = str | list[str]
+TextTokenizationMapping: TypeAlias = Mapping[str, Tensor]
+TextTokenizationOutputs: TypeAlias = \
+    list[TextTokenizationMapping] | TextTokenizationMapping
+TensorData: TypeAlias = (Tensor | MultiNestedTensor | MultiEmbeddingTensor
+                         | dict[str, MultiNestedTensor])

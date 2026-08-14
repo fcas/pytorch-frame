@@ -1,9 +1,10 @@
+from collections.abc import Callable
 from importlib import import_module
 from importlib.util import find_spec
-from typing import Callable
 
 import torch
 from packaging.requirements import Requirement
+from packaging.version import Version
 
 
 def has_package(package: str) -> bool:
@@ -18,12 +19,7 @@ def has_package(package: str) -> bool:
     if not hasattr(module, '__version__'):
         return True
 
-    version = module.__version__
-    # `req.specifier` does not support `.dev` suffixes, e.g., for
-    # `pyg_lib==0.1.0.dev*`, so we manually drop them:
-    if '.dev' in version:
-        version = '.'.join(version.split('.dev')[:-1])
-
+    version = Version(module.__version__).base_version
     return version in req.specifier
 
 
@@ -52,3 +48,12 @@ def withCUDA(func: Callable):
         devices.append(pytest.param(torch.device('cuda:0'), id='cuda:0'))
 
     return pytest.mark.parametrize('device', devices)(func)
+
+
+def onlyCUDA(func: Callable) -> Callable:
+    r"""A decorator to skip tests if CUDA is not found."""
+    import pytest
+    return pytest.mark.skipif(
+        not torch.cuda.is_available(),
+        reason="CUDA not available",
+    )(func)

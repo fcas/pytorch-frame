@@ -20,6 +20,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
+    'sphinx_copybutton',
     'pyg',
 ]
 
@@ -40,10 +41,13 @@ intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
     'numpy': ('http://docs.scipy.org/doc/numpy', None),
     'pandas': ('http://pandas.pydata.org/pandas-docs/dev', None),
-    'torch': ('https://pytorch.org/docs/master', None),
+    'torch': ('https://pytorch.org/docs/stable', None),
     'optuna': ('https://optuna.readthedocs.io/en/stable/', None),
     'xgboost': ('https://xgboost.readthedocs.io/en/stable/', None),
 }
+
+copybutton_prompt_text = r">>> |\.\.\. "
+copybutton_prompt_is_regexp = True
 
 
 def setup(app):

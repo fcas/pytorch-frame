@@ -1,15 +1,14 @@
 import random
-from typing import List, Optional, Tuple, Union
 
 import pytest
 import torch
 
 from torch_frame.data.multi_embedding_tensor import MultiEmbeddingTensor
-from torch_frame.testing import withCUDA
+from torch_frame.testing import onlyCUDA, withCUDA
 
 
 def assert_equal(
-    tensor_list: List[torch.Tensor],
+    tensor_list: list[torch.Tensor],
     met: MultiEmbeddingTensor,
 ) -> None:
     assert len(tensor_list) == met.num_cols
@@ -22,9 +21,9 @@ def assert_equal(
 
 
 def row_select(
-    tensor_list: List[torch.Tensor],
-    index: Union[List[int], slice],
-) -> List[torch.Tensor]:
+    tensor_list: list[torch.Tensor],
+    index: list[int] | slice,
+) -> list[torch.Tensor]:
     """Selects rows from a list of column tensors.
 
     Args:
@@ -43,9 +42,9 @@ def row_select(
 def get_fake_multi_embedding_tensor(
     num_rows: int,
     num_cols: int,
-    embedding_dim: Optional[int] = None,
-    device: Optional[torch.device] = None,
-) -> Tuple[MultiEmbeddingTensor, List[torch.Tensor]]:
+    embedding_dim: int | None = None,
+    device: torch.device | None = None,
+) -> tuple[MultiEmbeddingTensor, list[torch.Tensor]]:
     tensor_list = []
     for _ in range(num_cols):
         embedding_dim = embedding_dim or random.randint(1, 5)
@@ -77,6 +76,17 @@ def test_size():
     assert met.shape[0] == num_rows
     assert met.shape[1] == num_cols
     assert met.shape[2] == -1
+
+
+def test_is_floating_point():
+    met = MultiEmbeddingTensor.from_tensor_list([
+        torch.tensor([[1]], dtype=torch.long),
+    ])
+    assert not met.is_floating_point()
+    met = MultiEmbeddingTensor.from_tensor_list([
+        torch.tensor([[1]], dtype=torch.float32),
+    ])
+    assert met.is_floating_point()
 
 
 def test_fillna_col():
@@ -476,3 +486,18 @@ def test_cat(device):
     # case: list of non-MultiEmbeddingTensor should raise error
     with pytest.raises(AssertionError):
         MultiEmbeddingTensor.cat([object()], dim=0)
+
+
+@onlyCUDA
+def test_pin_memory():
+    met, _ = get_fake_multi_embedding_tensor(
+        num_rows=2,
+        num_cols=3,
+    )
+    assert not met.is_pinned()
+    assert not met.values.is_pinned()
+    assert not met.offset.is_pinned()
+    met = met.pin_memory()
+    assert met.is_pinned()
+    assert met.values.is_pinned()
+    assert met.offset.is_pinned()

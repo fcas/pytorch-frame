@@ -7,6 +7,7 @@ import torch_frame
 from torch_frame import TensorFrame
 from torch_frame.data.multi_embedding_tensor import MultiEmbeddingTensor
 from torch_frame.data.multi_nested_tensor import MultiNestedTensor
+from torch_frame.testing import onlyCUDA
 
 
 def test_tensor_frame_basics(get_fake_tensor_frame):
@@ -206,3 +207,66 @@ def test_get_col_feat(get_fake_tensor_frame):
         else:
             assert torch.allclose(torch.cat(feat_list, dim=1),
                                   tf.feat_dict[stype])
+
+
+def test_empty_tensor_frame():
+    tf = TensorFrame({}, {})
+    assert tf.num_rows == 0
+    assert tf.device is None
+
+    tf = TensorFrame({}, {}, num_rows=4)
+    assert tf.num_rows == 4
+    assert tf.device is None
+    assert tf[0].num_rows == 1
+    assert tf[[0, 1]].num_rows == 2
+    assert tf[0:2].num_rows == 2
+    assert tf[torch.tensor([0, 1])].num_rows == 2
+    assert tf[torch.tensor([True, True, False, False])].num_rows == 2
+
+
+def test_custom_tf_get_col_feat():
+    col_names_dict = {
+        'categorical': ['cat_1', 'cat_2', 'cat_3'],
+        'numerical': ['num_1', 'num_2'],
+    }
+    feat_dict = {
+        'categorical': torch.randint(0, 3, size=(10, 3)),
+        'numerical': torch.randn(10, 2),
+    }
+
+    tf = TensorFrame(feat_dict=feat_dict, col_names_dict=col_names_dict)
+
+    feat = tf.get_col_feat('cat_1')
+    assert torch.equal(feat, feat_dict['categorical'][:, 0:1])
+    feat = tf.get_col_feat('cat_2')
+    assert torch.equal(feat, feat_dict['categorical'][:, 1:2])
+    feat = tf.get_col_feat('cat_3')
+    assert torch.equal(feat, feat_dict['categorical'][:, 2:3])
+    feat = tf.get_col_feat('num_1')
+    assert torch.equal(feat, feat_dict['numerical'][:, 0:1])
+    feat = tf.get_col_feat('num_2')
+    assert torch.equal(feat, feat_dict['numerical'][:, 1:2])
+
+
+def test_non_list_col_names_dict():
+    feat_dict = {torch_frame.categorical: torch.randint(0, 3, size=(10, 1))}
+    # Oops, user provided a single column name without wrapping it in a list:
+    col_names_dict = {torch_frame.categorical: 'cat_1'}
+    with pytest.raises(ValueError, match='must be a list of column names'):
+        TensorFrame(feat_dict, col_names_dict)
+
+
+@onlyCUDA
+def test_pin_memory(get_fake_tensor_frame):
+    def assert_is_pinned(tf: TensorFrame, expected: bool) -> bool:
+        for value in tf.feat_dict.values():
+            if isinstance(value, dict):
+                for v in value.values():
+                    assert v.is_pinned() is expected
+            else:
+                assert value.is_pinned() is expected
+
+    tf = get_fake_tensor_frame(10)
+    assert_is_pinned(tf, expected=False)
+    tf = tf.pin_memory()
+    assert_is_pinned(tf, expected=True)

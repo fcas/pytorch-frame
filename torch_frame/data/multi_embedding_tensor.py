@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import torch
 from torch import Tensor
@@ -56,6 +56,8 @@ class MultiEmbeddingTensor(_MultiTensor):
         MultiEmbeddingTensor(num_rows=4, num_cols=3, device='cpu')
     """
     def validate(self) -> None:
+        if torch.compiler.is_compiling():
+            return
         assert self.offset[0] == 0
         assert len(self.offset) == self.num_cols + 1
         assert self.offset.ndim == 1
@@ -194,12 +196,12 @@ class MultiEmbeddingTensor(_MultiTensor):
                 values=values,
                 offset=offset,
             )
-        assert False, "Should not reach here."
+        raise AssertionError("Should not reach here.")
 
     def fillna_col(
         self,
         col_index: int,
-        fill_value: Union[int, float, Tensor],
+        fill_value: int | float | Tensor,
     ) -> None:
         values_index = slice(self.offset[col_index],
                              self.offset[col_index + 1])
@@ -290,4 +292,4 @@ class MultiEmbeddingTensor(_MultiTensor):
             offset = torch.tensor(offset_list)
             return MultiEmbeddingTensor(num_rows, num_cols, values, offset)
 
-        assert False, "Should not reach here."
+        raise AssertionError("Should not reach here.")

@@ -86,8 +86,9 @@ class HuggingFaceDatasetDict(torch_frame.data.Dataset):
     ) -> None:
         try:
             from datasets import DatasetDict, load_dataset
-        except ImportError:  # pragma: no cover
-            raise ImportError("Please run `pip install datasets` at first.")
+        except ImportError as e:  # pragma: no cover
+            raise ImportError(
+                "Please run `pip install datasets` first.") from e
         dataset = load_dataset(path, name=name)
         if not isinstance(dataset, DatasetDict):
             raise ValueError(f"{self.__class__} only supports `DatasetDict`")
@@ -123,7 +124,7 @@ class HuggingFaceDatasetDict(torch_frame.data.Dataset):
         if len(split_names) > 1:
             dfs = [
                 df.assign(split=SPLIT_TO_NUM[split_name])
-                for split_name, df in zip(split_names, dfs)
+                for split_name, df in zip(split_names, dfs, strict=False)
             ]
 
         df = pd.concat(dfs).reset_index(drop=True)
